@@ -10,8 +10,11 @@ import GraphClient from './graph-client.js';
 import AuthManager, { buildScopesFromEndpoints } from './auth.js';
 import { MicrosoftOAuthProvider } from './oauth-provider.js';
 import {
+  ensureMicrosoftClaimsCapability,
+  ensureMicrosoftOAuthScopes,
   OAuthTokenExchangeError,
   exchangeCodeForToken,
+  getMicrosoftOAuthPrompt,
   microsoftBearerTokenAuthMiddleware,
   refreshAccessToken,
 } from './lib/microsoft-auth.js';
@@ -184,6 +187,7 @@ class MicrosoftGraphServer {
         const url = new URL(`${protocol}://${req.get('host')}`);
 
         const scopes = buildScopesFromEndpoints(this.options.orgMode, this.options.enabledTools);
+        const scopesSupported = ensureMicrosoftOAuthScopes(scopes.join(' ')).split(' ');
 
         const metadata: Record<string, unknown> = {
           issuer: url.origin,
@@ -194,7 +198,7 @@ class MicrosoftGraphServer {
           grant_types_supported: ['authorization_code', 'refresh_token'],
           token_endpoint_auth_methods_supported: ['none'],
           code_challenge_methods_supported: ['S256'],
-          scopes_supported: scopes,
+          scopes_supported: scopesSupported,
         };
 
         if (this.options.enableDynamicRegistration) {
@@ -210,11 +214,12 @@ class MicrosoftGraphServer {
         const url = new URL(`${protocol}://${req.get('host')}`);
 
         const scopes = buildScopesFromEndpoints(this.options.orgMode, this.options.enabledTools);
+        const scopesSupported = ensureMicrosoftOAuthScopes(scopes.join(' ')).split(' ');
 
         res.json({
           resource: `${url.origin}/mcp`,
           authorization_servers: [url.origin],
-          scopes_supported: scopes,
+          scopes_supported: scopesSupported,
           bearer_methods_supported: ['header'],
           resource_documentation: `${url.origin}`,
         });
@@ -258,6 +263,7 @@ class MicrosoftGraphServer {
           'response_mode',
           'code_challenge',
           'code_challenge_method',
+          'claims',
           'prompt',
           'login_hint',
           'domain_hint',
@@ -273,9 +279,19 @@ class MicrosoftGraphServer {
         // Use our Microsoft app's client_id
         microsoftAuthUrl.searchParams.set('client_id', clientId);
 
-        // Ensure we have the minimal required scopes if none provided
-        if (!microsoftAuthUrl.searchParams.get('scope')) {
-          microsoftAuthUrl.searchParams.set('scope', 'User.Read Files.Read Mail.Read');
+        const requestedScope = microsoftAuthUrl.searchParams.get('scope');
+        microsoftAuthUrl.searchParams.set(
+          'scope',
+          ensureMicrosoftOAuthScopes(requestedScope || 'User.Read Files.Read Mail.Read')
+        );
+        microsoftAuthUrl.searchParams.set(
+          'claims',
+          ensureMicrosoftClaimsCapability(microsoftAuthUrl.searchParams.get('claims'))
+        );
+
+        const prompt = getMicrosoftOAuthPrompt(microsoftAuthUrl.searchParams.get('prompt'));
+        if (prompt) {
+          microsoftAuthUrl.searchParams.set('prompt', prompt);
         }
 
         // Redirect to Microsoft's authorization page
@@ -335,7 +351,8 @@ class MicrosoftGraphServer {
               clientSecret,
               tenantId,
               body.code_verifier as string | undefined,
-              this.secrets!.cloudType
+              this.secrets!.cloudType,
+              typeof body.claims === 'string' ? body.claims : undefined
             );
             res.json(result);
           } else if (body.grant_type === 'refresh_token') {

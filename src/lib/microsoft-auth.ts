@@ -7,6 +7,78 @@ type OAuthErrorBody = {
   error_description?: string;
 };
 
+const MICROSOFT_REFRESH_SCOPE = 'offline_access';
+const MICROSOFT_CLIENT_CAPABILITY_CLAIMS = {
+  access_token: {
+    xms_cc: {
+      values: ['cp1'],
+    },
+  },
+};
+
+type ClaimsRequest = {
+  access_token?: {
+    xms_cc?: {
+      values?: string[];
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+export function ensureMicrosoftOAuthScopes(scope: string | null | undefined): string {
+  const scopes = new Set(
+    (scope ?? '')
+      .split(/\s+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  );
+
+  scopes.add(MICROSOFT_REFRESH_SCOPE);
+
+  return Array.from(scopes).join(' ');
+}
+
+export function ensureMicrosoftClaimsCapability(claims: string | null | undefined): string {
+  if (!claims) {
+    return JSON.stringify(MICROSOFT_CLIENT_CAPABILITY_CLAIMS);
+  }
+
+  try {
+    const parsed = JSON.parse(claims) as ClaimsRequest;
+    const accessTokenClaims = parsed.access_token ?? {};
+    const xmsCc = accessTokenClaims.xms_cc ?? {};
+    const values = new Set((xmsCc.values ?? []).map((value) => value.toLowerCase()));
+    values.add('cp1');
+
+    return JSON.stringify({
+      ...parsed,
+      access_token: {
+        ...accessTokenClaims,
+        xms_cc: {
+          ...xmsCc,
+          values: Array.from(values),
+        },
+      },
+    });
+  } catch {
+    return claims;
+  }
+}
+
+export function getMicrosoftOAuthPrompt(requestedPrompt: string | null | undefined): string | null {
+  if (requestedPrompt) {
+    return requestedPrompt;
+  }
+
+  const configuredPrompt = process.env.MS365_MCP_OAUTH_PROMPT?.trim();
+  if (configuredPrompt === 'disabled') {
+    return null;
+  }
+
+  return configuredPrompt || 'select_account';
+}
+
 export class OAuthTokenExchangeError extends Error {
   public readonly statusCode: number;
   public readonly oauthError: string;
@@ -16,7 +88,7 @@ export class OAuthTokenExchangeError extends Error {
     const errorBody = parseOAuthErrorBody(responseBody);
     const oauthError = errorBody.error || 'invalid_request';
     const oauthErrorDescription = sanitizeOAuthErrorDescription(
-      errorBody.error_description || responseBody || `${operation} failed`,
+      errorBody.error_description || responseBody || `${operation} failed`
     );
 
     super(`${operation} failed: ${oauthErrorDescription}`);
@@ -87,7 +159,8 @@ export async function exchangeCodeForToken(
   clientSecret: string | undefined,
   tenantId: string = 'common',
   codeVerifier?: string,
-  cloudType: CloudType = 'global'
+  cloudType: CloudType = 'global',
+  claims?: string
 ): Promise<{
   access_token: string;
   token_type: string;
@@ -111,6 +184,10 @@ export async function exchangeCodeForToken(
   // Add code_verifier for PKCE flow
   if (codeVerifier) {
     params.append('code_verifier', codeVerifier);
+  }
+
+  if (claims) {
+    params.append('claims', claims);
   }
 
   const response = await fetch(`${cloudEndpoints.authority}/${tenantId}/oauth2/v2.0/token`, {
