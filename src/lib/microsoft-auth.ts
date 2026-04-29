@@ -2,6 +2,48 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../logger.js';
 import { getCloudEndpoints, type CloudType } from '../cloud-config.js';
 
+type OAuthErrorBody = {
+  error?: string;
+  error_description?: string;
+};
+
+export class OAuthTokenExchangeError extends Error {
+  public readonly statusCode: number;
+  public readonly oauthError: string;
+  public readonly oauthErrorDescription: string;
+
+  constructor(operation: string, statusCode: number, responseBody: string) {
+    const errorBody = parseOAuthErrorBody(responseBody);
+    const oauthError = errorBody.error || 'invalid_request';
+    const oauthErrorDescription = sanitizeOAuthErrorDescription(
+      errorBody.error_description || responseBody || `${operation} failed`,
+    );
+
+    super(`${operation} failed: ${oauthErrorDescription}`);
+    this.name = 'OAuthTokenExchangeError';
+    this.statusCode = statusCode;
+    this.oauthError = oauthError;
+    this.oauthErrorDescription = oauthErrorDescription;
+  }
+}
+
+function parseOAuthErrorBody(responseBody: string): OAuthErrorBody {
+  try {
+    const parsed = JSON.parse(responseBody) as OAuthErrorBody;
+    return {
+      error: typeof parsed.error === 'string' ? parsed.error : undefined,
+      error_description:
+        typeof parsed.error_description === 'string' ? parsed.error_description : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function sanitizeOAuthErrorDescription(description: string): string {
+  return description.replace(/[\r\n]+/g, ' ').slice(0, 1000);
+}
+
 /**
  * Microsoft Bearer Token Auth Middleware validates that the request has a valid Microsoft access token
  * The token is passed in the Authorization header as a Bearer token
@@ -82,7 +124,7 @@ export async function exchangeCodeForToken(
   if (!response.ok) {
     const error = await response.text();
     logger.error(`Failed to exchange code for token: ${error}`);
-    throw new Error(`Failed to exchange code for token: ${error}`);
+    throw new OAuthTokenExchangeError('Authorization code exchange', response.status, error);
   }
 
   return response.json();
@@ -126,7 +168,7 @@ export async function refreshAccessToken(
   if (!response.ok) {
     const error = await response.text();
     logger.error(`Failed to refresh token: ${error}`);
-    throw new Error(`Failed to refresh token: ${error}`);
+    throw new OAuthTokenExchangeError('Refresh token exchange', response.status, error);
   }
 
   return response.json();

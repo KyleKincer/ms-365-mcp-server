@@ -10,6 +10,7 @@ import GraphClient from './graph-client.js';
 import AuthManager, { buildScopesFromEndpoints } from './auth.js';
 import { MicrosoftOAuthProvider } from './oauth-provider.js';
 import {
+  OAuthTokenExchangeError,
   exchangeCodeForToken,
   microsoftBearerTokenAuthMiddleware,
   refreshAccessToken,
@@ -365,6 +366,14 @@ class MicrosoftGraphServer {
           }
         } catch (error) {
           logger.error('Token endpoint error:', error);
+          if (error instanceof OAuthTokenExchangeError) {
+            res.status(error.statusCode).json({
+              error: error.oauthError,
+              error_description: error.oauthErrorDescription,
+            });
+            return;
+          }
+
           res.status(500).json({
             error: 'server_error',
             error_description: 'Internal server error during token exchange',
