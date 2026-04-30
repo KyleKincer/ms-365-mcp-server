@@ -384,10 +384,16 @@ class MicrosoftGraphServer {
         } catch (error) {
           logger.error('Token endpoint error:', error);
           if (error instanceof OAuthTokenExchangeError) {
-            res.status(error.statusCode).json({
+            const errorResponse: Record<string, string> = {
               error: error.oauthError,
               error_description: error.oauthErrorDescription,
-            });
+            };
+
+            if (error.oauthClaims) {
+              errorResponse.claims = error.oauthClaims;
+            }
+
+            res.status(error.statusCode).json(errorResponse);
             return;
           }
 

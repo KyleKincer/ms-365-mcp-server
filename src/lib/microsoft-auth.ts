@@ -5,6 +5,7 @@ import { getCloudEndpoints, type CloudType } from '../cloud-config.js';
 type OAuthErrorBody = {
   error?: string;
   error_description?: string;
+  claims?: string;
 };
 
 const MICROSOFT_REFRESH_SCOPE = 'offline_access';
@@ -83,6 +84,7 @@ export class OAuthTokenExchangeError extends Error {
   public readonly statusCode: number;
   public readonly oauthError: string;
   public readonly oauthErrorDescription: string;
+  public readonly oauthClaims?: string;
 
   constructor(operation: string, statusCode: number, responseBody: string) {
     const errorBody = parseOAuthErrorBody(responseBody);
@@ -96,6 +98,7 @@ export class OAuthTokenExchangeError extends Error {
     this.statusCode = statusCode;
     this.oauthError = oauthError;
     this.oauthErrorDescription = oauthErrorDescription;
+    this.oauthClaims = errorBody.claims;
   }
 }
 
@@ -106,6 +109,7 @@ function parseOAuthErrorBody(responseBody: string): OAuthErrorBody {
       error: typeof parsed.error === 'string' ? parsed.error : undefined,
       error_description:
         typeof parsed.error_description === 'string' ? parsed.error_description : undefined,
+      claims: typeof parsed.claims === 'string' ? parsed.claims : undefined,
     };
   } catch {
     return {};

@@ -4,6 +4,7 @@ import {
   ensureMicrosoftOAuthScopes,
   exchangeCodeForToken,
   getMicrosoftOAuthPrompt,
+  OAuthTokenExchangeError,
 } from '../src/lib/microsoft-auth.js';
 
 describe('Microsoft OAuth compatibility helpers', () => {
@@ -100,5 +101,22 @@ describe('Microsoft OAuth compatibility helpers', () => {
 
     const params = new URLSearchParams(requestBody);
     expect(params.get('claims')).toBe('{"access_token":{"xms_cc":{"values":["cp1"]}}}');
+  });
+
+  it('preserves Microsoft claims challenges from token exchange errors', () => {
+    const claims = '{"access_token":{"acrs":{"essential":true,"value":"c1"}}}';
+    const error = new OAuthTokenExchangeError(
+      'Authorization code exchange',
+      400,
+      JSON.stringify({
+        error: 'invalid_grant',
+        error_description: 'AADSTS50076: MFA required.',
+        claims,
+      })
+    );
+
+    expect(error.oauthError).toBe('invalid_grant');
+    expect(error.oauthErrorDescription).toBe('AADSTS50076: MFA required.');
+    expect(error.oauthClaims).toBe(claims);
   });
 });
