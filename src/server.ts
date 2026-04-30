@@ -352,7 +352,7 @@ class MicrosoftGraphServer {
               tenantId,
               body.code_verifier as string | undefined,
               this.secrets!.cloudType,
-              typeof body.claims === 'string' ? body.claims : undefined
+              ensureMicrosoftClaimsCapability(typeof body.claims === 'string' ? body.claims : undefined)
             );
             res.json(result);
           } else if (body.grant_type === 'refresh_token') {
