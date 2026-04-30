@@ -68,16 +68,12 @@ export function ensureMicrosoftClaimsCapability(claims: string | null | undefine
 }
 
 export function getMicrosoftOAuthPrompt(requestedPrompt: string | null | undefined): string | null {
-  if (requestedPrompt) {
-    return requestedPrompt;
-  }
-
   const configuredPrompt = process.env.MS365_MCP_OAUTH_PROMPT?.trim();
   if (configuredPrompt === 'disabled') {
     return null;
   }
 
-  return configuredPrompt || 'select_account';
+  return configuredPrompt || requestedPrompt || 'select_account';
 }
 
 export class OAuthTokenExchangeError extends Error {

@@ -68,6 +68,7 @@ describe('Microsoft OAuth compatibility helpers', () => {
 
     vi.stubEnv('MS365_MCP_OAUTH_PROMPT', 'login');
     expect(getMicrosoftOAuthPrompt(undefined)).toBe('login');
+    expect(getMicrosoftOAuthPrompt('consent')).toBe('login');
   });
 
   it('forwards claims to Microsoft token exchange when provided', async () => {
