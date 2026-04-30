@@ -190,9 +190,8 @@ export async function exchangeCodeForToken(
     params.append('code_verifier', codeVerifier);
   }
 
-  const effectiveClaims = ensureMicrosoftClaimsCapability(claims);
-  if (effectiveClaims) {
-    params.append('claims', effectiveClaims);
+  if (claims) {
+    params.append('claims', claims);
   }
 
   const response = await fetch(`${cloudEndpoints.authority}/${tenantId}/oauth2/v2.0/token`, {

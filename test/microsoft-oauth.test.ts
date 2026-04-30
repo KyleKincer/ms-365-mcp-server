@@ -104,45 +104,6 @@ describe('Microsoft OAuth compatibility helpers', () => {
     expect(params.get('claims')).toBe('{"access_token":{"xms_cc":{"values":["cp1"]}}}');
   });
 
-  it('adds cp1 client capability to Microsoft token exchange when claims are omitted', async () => {
-    let requestBody = '';
-    global.fetch = vi
-      .fn()
-      .mockImplementation(async (_url: string, options: FetchOptionsWithBody) => {
-        requestBody = options.body?.toString() ?? '';
-        return {
-          ok: true,
-          json: async () => ({
-            access_token: 'access-token',
-            token_type: 'Bearer',
-            scope: 'User.Read offline_access',
-            expires_in: 3600,
-            refresh_token: 'refresh-token',
-          }),
-        } as Response;
-      });
-
-    await exchangeCodeForToken(
-      'code',
-      'https://echo.sweetwater.com/api/mcp/m365/oauth/callback',
-      'client-id',
-      undefined,
-      'tenant-id',
-      'verifier',
-      'global',
-      undefined
-    );
-
-    const params = new URLSearchParams(requestBody);
-    expect(JSON.parse(params.get('claims') ?? '{}')).toEqual({
-      access_token: {
-        xms_cc: {
-          values: ['cp1'],
-        },
-      },
-    });
-  });
-
   it('preserves Microsoft claims challenges from token exchange errors', () => {
     const claims = '{"access_token":{"acrs":{"essential":true,"value":"c1"}}}';
     const error = new OAuthTokenExchangeError(
